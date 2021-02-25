@@ -1,41 +1,39 @@
-import aiohttp
 import asyncio
-import json
 
+from REST_client.ApiClient import ApiClient
 
 api_endpoint = "https://pokeapi.co/api/v2/pokemon/"
 
 
-async def get_pokemon(session: aiohttp.ClientSession, name):
-    async with session.get(api_endpoint + name) as response:
-        if response.status == 404:
-            print("Pokemon not found, try again")
-
-        html = await response.text()
-        try:
-            pokemon_object = json.loads(html)
-        except Exception:
-            return
-        print("Abilities:")
-        for ability in pokemon_object["abilities"]:
-            if not ability["is_hidden"]:
-                print("\tAbility:", ability["ability"]["name"], "\n\t\tMore Info: ", ability["ability"]["url"])
-        print("Base Experience", pokemon_object["base_experience"])
-        print("Height", pokemon_object["height"])
-        print("First 10 Moves")
-        for move in pokemon_object["moves"][:10]:
-            print("\tMove:", move["move"]["name"], "\n\t\tMore Info", move["move"]["url"])
+async def print_waiting(name):
+    while True:
+        print("Waiting for Response for Pokemon", name, "...")
+        await asyncio.sleep(0.5)
 
 
 async def main():
-    async with aiohttp.ClientSession() as session:
-        while True:
-            name = input("Enter pokemon name: ")
-            if name == "":
-                break
-            await get_pokemon(session, name)
+    client = ApiClient()
+    while True:
+        name = input("Enter pokemon name: ")
+        if name == "":
+            break
+        finished, pending = await asyncio.wait([client.get_pokemon(name), print_waiting(name)],
+                                               return_when=asyncio.FIRST_COMPLETED)
+        pokemon = finished.pop().result()
+        for task in pending:
+            task.cancel()
+        if pokemon is None:
+            continue
+        print("Abilities:")
+        for ability in pokemon["abilities"]:
+            if not ability["is_hidden"]:
+                print("\tAbility:", ability["ability"]["name"], "\n\t\tMore Info: ", ability["ability"]["url"])
+        print("Base Experience", pokemon["base_experience"])
+        print("Height", pokemon["height"])
+        print("First 10 Moves")
+        for move in pokemon["moves"][:10]:
+            print("\tMove:", move["move"]["name"], "\n\t\tMore Info", move["move"]["url"])
 
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    asyncio.run(main())
